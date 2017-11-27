@@ -1,0 +1,112 @@
+---
+title: "Practical Machine Learning Project"
+author: "Mohamed Farrag"
+date: "November 26, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## introduction:
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har 
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+required libraries: dplyr,ggplot2,lubridate,caret,randomForest,rpart,rpart.plot,corrplot
+```{r loading libraries, echo=FALSE, warning= FALSE}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+```
+## data loading and transforming
+```{r loading data}
+set.seed(12345)
+
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+data.training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+data.testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+
+```
+```{r data transform}
+data.training$cvtd_timestamp<- as.Date(data.training$cvtd_timestamp, format = "%m/%d/%Y %H:%M")
+data.training$Day<-factor(weekdays(data.training$cvtd_timestamp)) #Add day variable
+```
+## explore data
+```{r explore data}
+dim(data.training)
+table(data.training$classe) 
+prop.table(table(data.training$classe)) 
+prop.table(table(data.training$user_name))
+prop.table(table(data.training$user_name, data.training$classe),1) 
+prop.table(table(data.training$user_name,data.training$classe),2) 
+prop.table(table(data.training$classe, data.training$Day),1) 
+qplot(x=Day, fill=classe, data = data.training)
+```
+## clean data
+```{r data cleaning}
+#### Remove columns with NA values
+data.training <- data.training[, colSums(is.na(data.training)) == 0]
+data.testing <- data.testing[, colSums(is.na(data.testing)) == 0] 
+
+#### Remove columns that are not relevant to accelerometer measurements.
+classe<- data.training$classe
+trainRemove<- grepl("^X|timestamp|window", names(data.training))
+data.training<- data.training[, !trainRemove]
+trainCleaned<- data.training[, sapply(data.training, is.numeric)]
+trainCleaned$classe<- classe
+testRemove<- grepl("^X|timestamp|window", names(data.testing))
+data.testing<- data.testing[, !testRemove]
+testCleaned<- data.testing[, sapply(data.testing, is.numeric)]
+```
+```{r create training and testing sets}
+set.seed(12345)
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+## model training
+```{r model training}
+controlRf <- trainControl(method="cv", 5)
+rfmod <- train(classe ~., data=trainData, method="rf", trControl=controlRf, importance=TRUE, ntree=100)
+rfmod
+## Accuacy of the model on Validation data set
+predictRfmod<- predict(rfmod, testData)
+confusionMatrix(testData$classe, predictRfmod)
+```
+the estimated accuracy of the model is 99.32% and the estimated out-of-sample error is 0.68%.
+
+## predicting
+```{r predicting}
+result <- predict(rfmod, testCleaned[, -length(names(testCleaned))])
+result
+```
+## tree visualization
+```{r Tree Visualization}
+rtree<- rpart(classe ~ ., data=trainData, method="class")
+prp(rtree)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
